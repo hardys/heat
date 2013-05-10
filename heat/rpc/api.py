@@ -20,6 +20,12 @@ PARAM_KEYS = (
     'timeout_mins', 'disable_rollback'
 )
 
+STACK_ACTIONS = (
+    STACK_ACTION_SUSPEND,
+) = (
+    'stack_suspend',
+)
+
 STACK_KEYS = (
     STACK_NAME, STACK_ID,
     STACK_CREATION_TIME, STACK_UPDATED_TIME, STACK_DELETION_TIME,

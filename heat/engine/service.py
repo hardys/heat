@@ -469,6 +469,14 @@ class EngineService(service.Service):
                 for resource in stack if resource.id is not None]
 
     @request_context
+    def list_stack_actions(self, cnxt, stack_identity):
+        s = self._get_stack(cnxt, stack_identity)
+
+        stack = parser.Stack.load(cnxt, stack=s)
+
+        return api.format_stack_actions(stack)
+
+    @request_context
     def metadata_update(self, cnxt, stack_identity,
                         resource_name, metadata):
         """

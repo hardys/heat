@@ -90,6 +90,21 @@ def format_stack(stack):
     return info
 
 
+def format_stack_actions(stack):
+    '''
+    Return a list of the valid actions for the given stack
+    Don't show actions which are unavailable due to the stack state
+    '''
+    res = []
+    if stack.state in (stack.CREATE_COMPLETE, stack.UPDATE_COMPLETE,
+                       stack.ROLLBACK_COMPLETE):
+        res.append({'action': STACK_ACTION_SUSPEND, 'enabled': True})
+    else:
+        res.append({'action': STACK_ACTION_SUSPEND, 'enabled': False})
+
+    return res
+
+
 def format_stack_resource(resource, detail=True):
     '''
     Return a representation of the given resource that matches the API output

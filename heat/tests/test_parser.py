@@ -22,6 +22,7 @@ from heat.engine import clients
 from heat.engine import resource
 from heat.engine import parser
 from heat.engine import parameters
+from heat.engine import scheduler
 from heat.engine import template
 
 from heat.tests.common import HeatTestCase
@@ -418,6 +419,38 @@ class StackTest(HeatTestCase):
         db_s = db_api.stack_get(self.ctx, stack_id)
         self.assertEqual(db_s, None)
         self.assertEqual(self.stack.state, self.stack.DELETE_COMPLETE)
+
+    @stack_delete_after
+    def test_suspend(self):
+        self.m.ReplayAll()
+        self.stack = parser.Stack(self.ctx, 'suspend_test',
+                                  parser.Template({}))
+        stack_id = self.stack.store()
+
+        self.stack.suspend()
+
+        self.assertEqual(self.stack.state, self.stack.SUSPEND_COMPLETE)
+        self.m.VerifyAll()
+
+    @stack_delete_after
+    def test_suspend_fail(self):
+        self.m.StubOutWithMock(scheduler, 'TaskRunner')
+        exc = exception.ResourceFailure(Exception())
+        scheduler.TaskRunner('foo').AndRaise(exc)
+        self.m.ReplayAll()
+
+        self.stack = parser.Stack(self.ctx, 'suspend_test',
+                                  parser.Template({}))
+        class DummyResource:
+            suspend = 'foo'
+        self.stack.dependencies = [DummyResource()]
+
+        stack_id = self.stack.store()
+
+        self.stack.suspend()
+
+        self.assertEqual(self.stack.state, self.stack.SUSPEND_FAILED)
+        self.m.VerifyAll()
 
     @stack_delete_after
     def test_delete_rollback(self):

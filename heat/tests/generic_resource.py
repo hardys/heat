@@ -30,3 +30,6 @@ class GenericResource(resource.Resource):
 
     def handle_update(self, json_snippet=None):
         logger.warning('Updating generic resource (Type "%s")' % self.type())
+
+    def handle_suspend(self):
+        logger.warning('Suspending generic resource (Type "%s")' % self.type())

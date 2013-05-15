@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 class Stack(object):
 
-    ACTIONS = (CREATE, DELETE, UPDATE, ROLLBACK
-               ) = ('CREATE', 'DELETE', 'UPDATE', 'ROLLBACK')
+    ACTIONS = (CREATE, DELETE, UPDATE, ROLLBACK, SUSPEND
+               ) = ('CREATE', 'DELETE', 'UPDATE', 'ROLLBACK', 'SUSPEND')
 
     CREATE_IN_PROGRESS = 'CREATE_IN_PROGRESS'
     CREATE_FAILED = 'CREATE_FAILED'
@@ -58,6 +58,10 @@ class Stack(object):
     ROLLBACK_IN_PROGRESS = 'ROLLBACK_IN_PROGRESS'
     ROLLBACK_COMPLETE = 'ROLLBACK_COMPLETE'
     ROLLBACK_FAILED = 'ROLLBACK_FAILED'
+
+    SUSPEND_IN_PROGRESS = 'SUSPEND_IN_PROGRESS'
+    SUSPEND_COMPLETE = 'SUSPEND_COMPLETE'
+    SUSPEND_FAILED = 'SUSPEND_FAILED'
 
     created_time = timestamp.Timestamp(db_api.stack_get, 'created_at')
     updated_time = timestamp.Timestamp(db_api.stack_get, 'updated_at')
@@ -526,6 +530,34 @@ class Stack(object):
                 self.state_set(self.ROLLBACK_COMPLETE, 'Rollback completed')
             db_api.stack_delete(self.context, self.id)
             self.id = None
+
+    def suspend(self):
+        '''
+        Suspend the stack, which invokes handle_suspend for all stack resources
+        waits for all resources to become SUSPEND_COMPLETE then declares the
+        stack SUSPEND_COMPLETE.
+        Note the default implementation for all resources is to do nothing
+        other than move to SUSPEND_COMPLETE, so the resources must implement
+        handle_suspend for this to have any effect.
+        '''
+        logger.info("Stack %s suspend started" % self.name)
+        self.state_set(self.SUSPEND_IN_PROGRESS, 'Stack suspend started')
+
+        failed = []
+        for res in reversed(self):
+            try:
+                scheduler.TaskRunner(res.suspend)()
+            except exception.ResourceFailure as ex:
+                logger.error("Resource %s suspend failed" % res.name)
+                failed.append(res.name)
+
+        if failed:
+            logger.error("Stack %s suspend failed" % self.name)
+            self.state_set(self.SUSPEND_FAILED, 'Stack suspend failed, '
+                           'resources %s failed to suspend' % ','.join(failed))
+        else:
+            logger.info("Stack %s suspend complete" % self.name)
+            self.state_set(self.SUSPEND_COMPLETE, 'Stack suspend complete')
 
     def output(self, key):
         '''

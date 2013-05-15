@@ -139,6 +139,10 @@ class EngineRpcAPITestCase(unittest.TestCase):
         self._test_engine_api('list_stack_resources', 'call',
                               stack_identity=self.identity)
 
+    def test_stack_suspend(self):
+        self._test_engine_api('stack_suspend', 'call',
+                              stack_identity=self.identity)
+
     def test_metadata_update(self):
         self._test_engine_api('metadata_update', 'call',
                               stack_identity=self.identity,

@@ -22,6 +22,7 @@ import webob
 from heat.common import context
 from heat.db import api as db_api
 from heat.engine import api
+from heat.rpc import api as rpc_api
 from heat.engine import clients
 from heat.engine.event import Event
 from heat.common import exception
@@ -475,6 +476,23 @@ class EngineService(service.Service):
         stack = parser.Stack.load(cnxt, stack=s)
 
         return api.format_stack_actions(stack)
+
+    @request_context
+    def stack_suspend(self, cnxt, stack_identity):
+        '''
+        Handle request to perform an action on an existing stack
+        actions are non-lifecycle operations which manipulate the
+        state of the stack but not the definition
+        '''
+        def _stack_suspend(stack):
+            logger.debug("SHDEBUG suspending stack %s" % stack.name)
+            ret = stack.suspend()
+            logger.debug("SHDEBUG ret = %s" % ret)
+
+        s = self._get_stack(cnxt, stack_identity)
+
+        stack = parser.Stack.load(cnxt, stack=s)
+        self._start_in_thread(stack.id, _stack_suspend, stack)
 
     @request_context
     def metadata_update(self, cnxt, stack_identity,

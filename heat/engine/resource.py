@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import sys
+
 import base64
 from datetime import datetime
 from eventlet.support import greenlets as greenlet
@@ -92,6 +94,9 @@ class Resource(object):
     UPDATE_IN_PROGRESS = 'UPDATE_IN_PROGRESS'
     UPDATE_FAILED = 'UPDATE_FAILED'
     UPDATE_COMPLETE = 'UPDATE_COMPLETE'
+    SUSPEND_IN_PROGRESS = 'SUSPEND_IN_PROGRESS'
+    SUSPEND_FAILED = 'SUSPEND_FAILED'
+    SUSPEND_COMPLETE = 'SUSPEND_COMPLETE'
 
     # Status values, returned from subclasses to indicate update method
     UPDATE_REPLACE = 'UPDATE_REPLACE'
@@ -307,6 +312,7 @@ class Resource(object):
         assert self.state is None, 'Resource create requested in invalid state'
 
         logger.info('creating %s' % str(self))
+        print >> sys.stderr, "SHDEBUG creating %s" % self.name
 
         # Re-resolve the template, since if the resource Ref's
         # the AWS::StackId pseudo parameter, it will change after
@@ -358,6 +364,16 @@ class Resource(object):
         '''
         return True
 
+    def check_suspend_complete(self, suspend_data):
+        '''
+        Check if the resource is suspended
+        By default this happens as soon as the handle_suspend() method
+        has completed successfully, but subclasses may customise this by
+        overriding this function. The return value of handle_suspend() is
+        passed in to this function each time it is called.
+        '''
+        return True
+
     def update(self, json_snippet=None):
         '''
         update the resource. Subclasses should provide a handle_update() method
@@ -392,6 +408,52 @@ class Resource(object):
                 self.t = self.stack.resolve_static_data(json_snippet)
                 self.state_set(self.UPDATE_COMPLETE)
             return result
+
+    def suspend(self):
+        '''
+        Suspend the resource.  Subclasses should provide a handle_suspend()
+        method to implement suspend, the base-class handle_update will fail
+        Note this uses the same coroutine logic as create() since suspending
+        instances is a non-immediate operation and we want to paralellize
+        '''
+        print >> sys.stderr, "SHDEBUG suspending %s, state=%s" % (self.name, self.state)
+
+        # Don't try to suspend the resource unless it's in a stable state
+        if self.state in (self.CREATE_IN_PROGRESS, self.UPDATE_IN_PROGRESS,
+                          self.DELETE_IN_PROGRESS):
+            exc = exception.Error('State %s invalid for suspend' % self.state)
+            raise exception.ResourceFailure(exc)
+
+        logger.info('suspending %s' % str(self))
+        try:
+            self.state_set(self.SUSPEND_IN_PROGRESS)
+            suspend_data = None
+            if callable(getattr(self, 'handle_suspend', None)):
+                suspend_data = self.handle_suspend()
+                yield
+            while not self.check_suspend_complete(suspend_data):
+                yield
+        except greenlet.GreenletExit:
+            # Older versions of greenlet erroneously had GreenletExit inherit
+            # from Exception instead of BaseException
+            with excutils.save_and_reraise_exception():
+                try:
+                    self.state_set(self.SUSPEND_FAILED, 'Suspend aborted')
+                except Exception:
+                    logger.exception('Error marking resource as failed')
+        except Exception as ex:
+            logger.exception('suspend %s', str(self))
+            failure = exception.ResourceFailure(ex)
+            self.state_set(self.SUSPEND_FAILED, str(failure))
+            raise failure
+        except:
+            with excutils.save_and_reraise_exception():
+                try:
+                    self.state_set(self.SUSPEND_FAILED, 'Suspend aborted')
+                except Exception:
+                    logger.exception('Error marking resource as failed')
+        else:
+            self.state_set(self.SUSPEND_COMPLETE)
 
     def physical_resource_name(self):
         return '%s.%s' % (self.stack.name, self.name)
@@ -568,6 +630,10 @@ class Resource(object):
 
     def handle_update(self, json_snippet=None):
         raise NotImplementedError("Update not implemented for Resource %s"
+                                  % type(self))
+
+    def handle_suspend(self):
+        raise NotImplementedError("Suspend not implemented for Resource %s"
                                   % type(self))
 
     def metadata_update(self, new_metadata=None):

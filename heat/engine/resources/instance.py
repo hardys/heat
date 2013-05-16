@@ -449,6 +449,46 @@ class Instance(resource.Resource):
                 eventlet.sleep(0.2)
         self.resource_id = None
 
+    def handle_suspend(self):
+        '''
+        Suspend an instance - note we do not wait for the SUSPENDED state,
+        this is polled for by check_suspend_complete in a similar way to the
+        create logic so we can take advantage of coroutines
+        '''
+        if self.resource_id is None:
+            raise exception.Error("Cannot suspend %s, resource_id not set" %
+                                  self.name)
+
+        if self.properties['Volumes']:
+            self.detach_volumes()
+
+        try:
+            server = self.nova().servers.get(self.resource_id)
+        except clients.novaclient.exceptions.NotFound:
+            raise exception.NotFound("%s Failed to find instance %s" %
+                                     (self.name, self.resource_id))
+        else:
+            logger.debug("suspending instance %s" % self.resource_id)
+            server.suspend()
+            return server
+
+    def check_suspend_complete(self, server):
+        if server.status == 'SUSPENDED':
+            return True
+
+        server.get()
+        logger.debug("%s check_suspend_complete status = %s" %
+                      (self.name, server.status))
+        if server.status in self._deferred_server_statuses + ['ACTIVE']:
+            if server.status == 'SUSPENDED':
+                return True
+            else:
+                return False
+        else:
+            raise exception.Error('%s instance[%s] status[%s]' %
+                                  ('nova reported unexpected',
+                                   self.name, server.status))
+
 
 def resource_mapping():
     return {

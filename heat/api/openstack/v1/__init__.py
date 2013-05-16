@@ -78,6 +78,10 @@ class API(wsgi.Router):
                                  "/stacks/{stack_name}/" + path,
                                  action="lookup",
                                  conditions={'method': 'GET'})
+            stack_mapper.connect("stack_lookup_subpath_post",
+                                 "/stacks/{stack_name}/" + path,
+                                 action="lookup",
+                                 conditions={'method': 'POST'})
             stack_mapper.connect("stack_show",
                                  "/stacks/{stack_name}/{stack_id}",
                                  action="show",
@@ -151,6 +155,12 @@ class API(wsgi.Router):
                               "/actions",
                               action="index",
                               conditions={'method': 'GET'})
+
+            ac_mapper.connect("action_stack",
+                              "/actions",
+                              action="action",
+                              conditions={'method': 'POST'})
+
 
 
         super(API, self).__init__(mapper)

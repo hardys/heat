@@ -54,6 +54,31 @@ class ActionController(object):
 
         return {'actions': act_list}
 
+    @util.identified_stack
+    def action(self, req, identity, body={}):
+        """
+        Performs a specified action on a stack, the body is expecting to
+        contain exactly one item whose key specifies the action
+        """
+
+        if len(body) < 1:
+            raise exc.HTTPBadRequest(_("No action specified"))
+
+        if len(body) >1:
+            raise exc.HTTPBadRequest(_("Multiple actions specified"))
+
+        ac = body.keys()[0]
+        if ac not in self._action_keymap.values():
+            raise exc.HTTPBadRequest(_("Invalid action %s specified" % ac))
+
+        if ac == 'suspend':
+            try:
+                res = self.engine.stack_suspend(req.context, identity)
+            except rpc_common.RemoteError as ex:
+                return util.remote_error(ex)
+        else:
+            raise exc.HTTPInternalServerError(_("Unexpected engine action %s"))
+
 
 def create_resource(options):
     """

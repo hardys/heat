@@ -477,7 +477,7 @@ class Resource(object):
         '''
         print >> sys.stderr, "SHDEBUG resuming %s, state=%s" % (self.name, self.state)
 
-        # Don't try to resume the resource unless it's in a stable state
+        # Don't try to resume unless in a suspended state
         if self.state not in (self.SUSPEND_COMPLETE, self.SUSPEND_FAILED):
             exc = exception.Error('State %s invalid for resume' % self.state)
             raise exception.ResourceFailure(exc)

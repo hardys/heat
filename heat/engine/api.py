@@ -96,8 +96,8 @@ def format_stack_actions(stack):
     Don't show actions which are unavailable due to the stack state
     '''
     res = []
-    if stack.state in (stack.CREATE_COMPLETE, stack.UPDATE_COMPLETE,
-                       stack.ROLLBACK_COMPLETE):
+    if stack.state not in (stack.CREATE_IN_PROGRESS, stack.UPDATE_IN_PROGRESS,
+                           stack.ROLLBACK_IN_PROGRESS):
         res.append({'action': STACK_ACTION_SUSPEND, 'enabled': True})
     else:
         res.append({'action': STACK_ACTION_SUSPEND, 'enabled': False})

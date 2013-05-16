@@ -29,7 +29,8 @@ class ActionController(object):
     Implements the API for stack actions
     """
 
-    _action_keymap = {engine_api.STACK_ACTION_SUSPEND: 'suspend'}
+    _action_keymap = {engine_api.STACK_ACTION_SUSPEND: 'suspend',
+                      engine_api.STACK_ACTION_RESUME: 'resume'}
 
     def __init__(self, options):
         self.options = options
@@ -74,6 +75,11 @@ class ActionController(object):
         if ac == 'suspend':
             try:
                 res = self.engine.stack_suspend(req.context, identity)
+            except rpc_common.RemoteError as ex:
+                return util.remote_error(ex)
+        elif ac == 'resume':
+            try:
+                res = self.engine.stack_resume(req.context, identity)
             except rpc_common.RemoteError as ex:
                 return util.remote_error(ex)
         else:

@@ -345,6 +345,12 @@ class Instance(resource.Resource):
         return server
 
     def check_create_complete(self, server):
+        return self._check_active(server)
+
+    def check_resume_complete(self, server):
+        return self._check_active(server)
+
+    def _check_active(self, server):
         if server.status == 'ACTIVE':
             return True
 
@@ -488,6 +494,26 @@ class Instance(resource.Resource):
             raise exception.Error('%s instance[%s] status[%s]' %
                                   ('nova reported unexpected',
                                    self.name, server.status))
+
+    def handle_resume(self):
+        '''
+        Resume an instance - note we do not wait for the ACTIVE state,
+        this is polled for by check_resume_complete in a similar way to the
+        create logic so we can take advantage of coroutines
+        '''
+        if self.resource_id is None:
+            raise exception.Error("Cannot resume %s, resource_id not set" %
+                                  self.name)
+
+        try:
+            server = self.nova().servers.get(self.resource_id)
+        except clients.novaclient.exceptions.NotFound:
+            raise exception.NotFound("%s Failed to find instance %s" %
+                                     (self.name, self.resource_id))
+        else:
+            logger.debug("resuming instance %s" % self.resource_id)
+            server.resume()
+            return server
 
 
 def resource_mapping():

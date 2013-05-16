@@ -102,6 +102,11 @@ def format_stack_actions(stack):
     else:
         res.append({'action': STACK_ACTION_SUSPEND, 'enabled': False})
 
+    if stack.state in (stack.SUSPEND_COMPLETE,):
+        res.append({'action': STACK_ACTION_RESUME, 'enabled': True})
+    else:
+        res.append({'action': STACK_ACTION_RESUME, 'enabled': False})
+
     return res
 
 

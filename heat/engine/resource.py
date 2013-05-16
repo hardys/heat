@@ -97,6 +97,9 @@ class Resource(object):
     SUSPEND_IN_PROGRESS = 'SUSPEND_IN_PROGRESS'
     SUSPEND_FAILED = 'SUSPEND_FAILED'
     SUSPEND_COMPLETE = 'SUSPEND_COMPLETE'
+    RESUME_IN_PROGRESS = 'RESUME_IN_PROGRESS'
+    RESUME_FAILED = 'RESUME_FAILED'
+    RESUME_COMPLETE = 'RESUME_COMPLETE'
 
     # Status values, returned from subclasses to indicate update method
     UPDATE_REPLACE = 'UPDATE_REPLACE'
@@ -374,6 +377,16 @@ class Resource(object):
         '''
         return True
 
+    def check_resume_complete(self, resume_data):
+        '''
+        Check if the resource is resumed
+        By default this happens as soon as the handle_resume() method
+        has completed successfully, but subclasses may customise this by
+        overriding this function. The return value of handle_resume() is
+        passed in to this function each time it is called.
+        '''
+        return True
+
     def update(self, json_snippet=None):
         '''
         update the resource. Subclasses should provide a handle_update() method
@@ -454,6 +467,53 @@ class Resource(object):
                     logger.exception('Error marking resource as failed')
         else:
             self.state_set(self.SUSPEND_COMPLETE)
+
+    def resume(self):
+        '''
+        resume the resource.  Subclasses should provide a handle_resume()
+        method to implement resume, the base-class handle_update will fail
+        Note this uses the same coroutine logic as create() since resuming
+        instances is a non-immediate operation and we want to paralellize
+        '''
+        print >> sys.stderr, "SHDEBUG resuming %s, state=%s" % (self.name, self.state)
+
+        # Don't try to resume the resource unless it's in a stable state
+        if self.state not in (self.SUSPEND_COMPLETE, self.SUSPEND_FAILED):
+            exc = exception.Error('State %s invalid for resume' % self.state)
+            raise exception.ResourceFailure(exc)
+
+        logger.info('resuming %s' % str(self))
+        try:
+            self.state_set(self.RESUME_IN_PROGRESS)
+            resume_data = None
+            if callable(getattr(self, 'handle_resume', None)):
+                resume_data = self.handle_resume()
+                yield
+            while not self.check_resume_complete(resume_data):
+                yield
+        except greenlet.GreenletExit:
+            # Older versions of greenlet erroneously had GreenletExit inherit
+            # from Exception instead of BaseException
+            with excutils.save_and_reraise_exception():
+                try:
+                    self.state_set(self.RESUME_FAILED, 'resume aborted')
+                except Exception:
+                    logger.exception('Error marking resource as failed')
+        except Exception as ex:
+            logger.exception('resume %s', str(self))
+            failure = exception.ResourceFailure(ex)
+            self.state_set(self.RESUME_FAILED, str(failure))
+            raise failure
+        except:
+            with excutils.save_and_reraise_exception():
+                try:
+                    self.state_set(self.RESUME_FAILED, 'resume aborted')
+                except Exception:
+                    logger.exception('Error marking resource as failed')
+        else:
+            # SH FIXME, we really need a way of restoring the pre-suspend
+            # state and reason here
+            self.state_set(self.RESUME_COMPLETE)
 
     def physical_resource_name(self):
         return '%s.%s' % (self.stack.name, self.name)

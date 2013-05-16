@@ -40,8 +40,9 @@ logger = logging.getLogger(__name__)
 
 class Stack(object):
 
-    ACTIONS = (CREATE, DELETE, UPDATE, ROLLBACK, SUSPEND
-               ) = ('CREATE', 'DELETE', 'UPDATE', 'ROLLBACK', 'SUSPEND')
+    ACTIONS = (CREATE, DELETE, UPDATE, ROLLBACK, SUSPEND, RESUME,
+               ) = ('CREATE', 'DELETE', 'UPDATE', 'ROLLBACK', 'SUSPEND', 
+                    'RESUME')
 
     CREATE_IN_PROGRESS = 'CREATE_IN_PROGRESS'
     CREATE_FAILED = 'CREATE_FAILED'
@@ -62,6 +63,10 @@ class Stack(object):
     SUSPEND_IN_PROGRESS = 'SUSPEND_IN_PROGRESS'
     SUSPEND_COMPLETE = 'SUSPEND_COMPLETE'
     SUSPEND_FAILED = 'SUSPEND_FAILED'
+
+    RESUME_IN_PROGRESS = 'RESUME_IN_PROGRESS'
+    RESUME_COMPLETE = 'RESUME_COMPLETE'
+    RESUME_FAILED = 'RESUME_FAILED'
 
     created_time = timestamp.Timestamp(db_api.stack_get, 'created_at')
     updated_time = timestamp.Timestamp(db_api.stack_get, 'updated_at')
@@ -558,6 +563,37 @@ class Stack(object):
         else:
             logger.info("Stack %s suspend complete" % self.name)
             self.state_set(self.SUSPEND_COMPLETE, 'Stack suspend complete')
+
+    def resume(self):
+        '''
+        Suspend the stack, which invokes handle_resume for all stack resources
+        waits for all resources to become RESUME_COMPLETE then declares the
+        stack RESUME_COMPLETE.
+        Note the default implementation for all resources is to do nothing
+        other than move to RESUME_COMPLETE, so the resources must implement
+        handle_resume for this to have any effect.
+        '''
+        logger.info("Stack %s resume started" % self.name)
+        self.state_set(self.RESUME_IN_PROGRESS, 'Stack resume started')
+
+        failed = []
+        for res in self:
+            try:
+                scheduler.TaskRunner(res.resume)()
+            except exception.ResourceFailure as ex:
+                logger.error("Resource %s resume failed" % res.name)
+                failed.append(res.name)
+
+        if failed:
+            logger.error("Stack %s resume failed" % self.name)
+            self.state_set(self.RESUME_FAILED, 'Stack resume failed, '
+                           'resources %s failed to resume' % ','.join(failed))
+        else:
+            # SH FIXME: We really need a way of storing and then restoring the
+            # pre-suspend stack state and reason, so suspend becomes a truly
+            # transient "action" state
+            logger.info("Stack %s resume complete" % self.name)
+            self.state_set(self.RESUME_COMPLETE, 'Stack resume complete')
 
     def output(self, key):
         '''

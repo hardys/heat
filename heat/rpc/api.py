@@ -22,8 +22,10 @@ PARAM_KEYS = (
 
 STACK_ACTIONS = (
     STACK_ACTION_SUSPEND,
+    STACK_ACTION_RESUME,
 ) = (
     'stack_suspend',
+    'stack_resume',
 )
 
 STACK_KEYS = (
